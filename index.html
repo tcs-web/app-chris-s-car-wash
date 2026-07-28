@@ -285,8 +285,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginScreen = document.getElementById('loginScreen');
   const appDiv = document.getElementById('app');
   const loginError = document.getElementById('loginError');
-  const loginEmail = document.getElementById('loginEmail'); // FIX FOR LOGIN
-  const loginPass = document.getElementById('loginPass'); // FIX FOR LOGIN
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPass = document.getElementById('loginPass');
   const clientProductGrid = document.getElementById('clientProductGrid');
   const productGrid = document.getElementById('productGrid');
   const productList = document.getElementById('productList');
@@ -328,20 +328,113 @@ document.addEventListener('DOMContentLoaded', () => {
     } else { loginScreen.style.display = 'block'; appDiv.style.display = 'none'; }
   })
 
-  //... ALL YOUR OTHER FUNCTIONS GO HERE UNCHANGED...
-  // I only added banking details to sendQuote and both PDF functions below
+  window.showTab = (tab, el) => {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    ['dashboard','products','stock','orders','users','reports'].forEach(t=>{
+      document.getElementById('tab-'+t).style.display = t==tab?'block':'none'
+    })
+  }
 
-  window.sendQuote = () => {
-    let name = document.getElementById('custName').value.trim(); let phone = document.getElementById('custPhone').value.trim(); let email = document.getElementById('custEmail').value.trim();
-    if(!name ||!phone) return alert('Please enter Name and Phone');
-    const orderId = Date.now().toString();
-    const order = { user: isClientMode? name : currentUser.email, customerName: name, customerPhone: phone, customerEmail: email, items: cart, total: cart.reduce((a,b)=>a+b.qty*b.price,0), date: new Date().toISOString(), status: 'Pending' };
-    set(ref(db, 'chriscarwash/requests/' + orderId), order);
-    let msg = `🚗 CHRIS'S CAR WASH ORDER\nName: ${name}\nPhone: ${phone}\nEmail: ${email}\n` + cart.map(i=>`${i.name} x${i.qty} - R${i.price}`).join('\n') + `\nTotal: R${order.total}\n\nLocation: Burgersfort Praktiseer Ext 02\n🏦 Banking: Capitec 1707705869 Branch 470010`;
-    window.open(`https://wa.me/27648739485?text=${encodeURIComponent(msg)}`);
-    cart = []; updateCart(); renderProducts(); renderClientProducts();
-    document.getElementById('customerModal').style.display='none'; document.getElementById('custName').value=''; document.getElementById('custPhone').value=''; document.getElementById('custEmail').value='';
-    alert('Order sent! We will contact you shortly')
+  onValue(productsRef, snap => { products = snap.val() || {}; renderProducts(); renderClientProducts(); buildProductList(); buildStockList(); updateDashboard(); })
+  onValue(ordersRef, snap => { orders = snap.val() || {}; buildOrders(); updateDashboard(); })
+
+  function updateDashboard(){
+    document.getElementById('statProducts').innerText = Object.keys(products).length;
+    document.getElementById('statStock').innerText = Object.values(products).reduce((a,b)=>a+(b.stock||0),0);
+    document.getElementById('statOrders').innerText = Object.values(orders).filter(o=>o.status=='Pending').length;
+    lowStockList.innerHTML = '';
+    Object.entries(products).filter(([id,p])=>p.stock < 10).forEach(([id,p])=>{
+      lowStockList.innerHTML += `<div style="padding:8px;background:#ffe6e6;border-radius:8px;margin:5px 0"><b>${p.name}</b> - <span style="color:var(--danger);font-weight:700">Only ${p.stock} left!</span></div>`
+    })
+    if(lowStockList.innerHTML=='') lowStockList.innerHTML = '<p style="color:var(--green)">All stock levels good ✅</p>'
+  }
+
+  function getImages(p){ if(!p.img) return ['https://i.ibb.co/QjtSn1DR/IMG-20260728-WA0352.jpg']; return p.img.split(',').map(s=>s.trim()).filter(s=>s); }
+  window.switchImage = (cardId, imgUrl, thumb) => { document.getElementById('main_'+cardId).src = imgUrl; document.querySelectorAll(`#card_${cardId}.card-imgs img`).forEach(i=>i.classList.remove('active')); thumb.classList.add('active'); }
+
+  function getCartControls(id){
+    let item = cart.find(x=>x.id==id);
+    if(!item) return `<button class="btn-cart" onclick="addToCart('${id}')">Add to Cart</button>`;
+    return `<div class="qty-controls"><button class="qty-btn" onclick="decreaseQty('${id}')">-</button><div class="qty-text">${item.qty}</div><button class="qty-btn" onclick="addToCart('${id}')">+</button></div>`;
+  }
+
+  function renderProducts(){
+    productGrid.innerHTML = '';
+    if(Object.keys(products).length === 0){ productGrid.innerHTML = `<p style="text-align:center;grid-column:1/-1">No services yet</p>`; return; }
+    Object.entries(products).filter(([id,p])=>{ let matchCat = currentFilter =='All' || p.category == currentFilter; let matchSearch = p.name.toLowerCase().includes(searchInput.value.toLowerCase()); return matchCat && matchSearch; }).forEach(([id,p])=>{
+      let imgs = getImages(p); let mainImg = imgs[0];
+      let extraImgs = imgs.map((u,i)=>`<img src="${u}" class="${i==0?'active':''}" onclick="switchImage('${id}','${u}',this)" onerror="this.style.display='none'">`).join('');
+      let brands = p.desc? p.desc.split(',').map(b=>`<span class="brand-tag">${b}</span>`).join('') : '';
+      let cartBtn = p.stock >0? getCartControls(id) : `<button class="btn-oos" disabled>Unavailable</button>`;
+      productGrid.innerHTML += `<div class="card" id="card_${id}"><img id="main_${id}" src="${mainImg}" loading="lazy" onerror="this.onerror=null;this.src='https://i.ibb.co/QjtSn1DR/IMG-20260728-WA0352.jpg'"><div class="card-imgs">${extraImgs}</div><h4>${p.name}</h4>${brands}<div class="price">R${p.price} ${p.oldPrice? `<span class="old-price">R${p.oldPrice}</span>`:''}</div><div class="stock ${p.stock<10?'stock-low':''}">Stock: ${p.stock}</div>${cartBtn}</div>`;
+    })
+  }
+
+  function renderClientProducts(){
+    if(!isClientMode) return;
+    clientProductGrid.innerHTML = '';
+    if(Object.keys(products).length === 0){ clientProductGrid.innerHTML = `<p style="text-align:center;grid-column:1/-1">No services yet</p>`; return; }
+    Object.entries(products).filter(([id,p])=>{ let matchCat = currentFilter == 'All' || p.category == currentFilter; let matchSearch = p.name.toLowerCase().includes(clientSearchInput.value.toLowerCase()); return matchCat && matchSearch; }).forEach(([id,p])=>{
+      let imgs = getImages(p); let mainImg = imgs[0];
+      let extraImgs = imgs.map((u,i)=>`<img src="${u}" class="${i==0?'active':''}" onclick="switchImage('${id}','${u}',this)" onerror="this.style.display='none'">`).join('');
+      let brands = p.desc? p.desc.split(',').map(b=>`<span class="brand-tag">${b}</span>`).join('') : '';
+      let cartBtn = p.stock > 0? getCartControls(id) : `<button class="btn-oos" disabled>Unavailable</button>`;
+      clientProductGrid.innerHTML += `<div class="card" id="card_${id}"><img id="main_${id}" src="${mainImg}" loading="lazy" onerror="this.onerror=null;this.src='https://i.ibb.co/QjtSn1DR/IMG-20260728-WA0352.jpg'"><div class="card-imgs">${extraImgs}</div><h4>${p.name}</h4>${brands}<div class="price">R${p.price} ${p.oldPrice? `<span class="old-price">R${p.oldPrice}</span>`:''}</div>${cartBtn}</div>`;
+    })
+  }
+
+  window.searchProducts = () => { renderProducts(); renderClientProducts(); }
+  window.filterCat = (cat, e) => {
+    currentFilter=cat;
+    renderProducts();
+    renderClientProducts();
+    document.querySelectorAll('.nav-cats button').forEach(b=>b.classList.remove('active'));
+    if(e) e.target.classList.add('active');
+  }
+
+  function buildProductList(){
+    if(currentUser.role == 'reception') return;
+    productList.innerHTML = '';
+    let searchTerm = adminSearch.value.toLowerCase();
+    Object.entries(products).filter(([id,p])=>{ return p.name.toLowerCase().includes(searchTerm) || p.category.toLowerCase().includes(searchTerm) }).forEach(([id,p])=>{
+      productList.innerHTML += `<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin:5px 0;background:#fafafa"><b>${p.name}</b> - R${p.price} - Stock: ${p.stock} - <small>${p.category}</small><div style="float:right;gap:5px;display:flex"><button onclick="editProduct('${id}')" class="btn-blue" style="padding:5px 10px;font-size:12px">Edit</button>${currentUser.role== 'ceo'? `<button onclick="deleteProduct('${id}')" class="btn-danger" style="padding:5px 10px;font-size:12px">Del</button>` : ''}</div></div>`;
+    })
+    if(productList.innerHTML === '') productList.innerHTML = '<p style="text-align:center;color:var(--muted)">No services found</p>'
+  }
+
+  function buildOrders(){
+    if(currentUser.role == 'reception') return;
+    ordersList.innerHTML = '';
+    if(Object.keys(orders).length === 0){ ordersList.innerHTML = '<p>No orders yet</p>'; return; }
+    Object.entries(orders).reverse().forEach(([id,o])=>{
+      let statusColor = o.status=='Completed'? 'var(--green)' : 'var(--accent)';
+      ordersList.innerHTML += `
+      <div class="order-card">
+        <b>Order #${id.slice(-6)}</b> - R${o.total} - <span style="color:${statusColor};font-weight:700">${o.status}</span><br>
+        <small>${new Date(o.date).toLocaleString()}</small><br>
+        <small><b>Customer:</b> ${o.customerName || 'Guest'} | ${o.customerPhone || o.user} | ${o.customerEmail || ''}</small><br>
+        <small>${o.items.map(i=>`${i.name} x${i.qty}`).join(', ')}</small><br>
+        <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn-blue" onclick="openInvoiceModal('${id}')">📄 Invoice</button>
+          <button class="btn-green" onclick="updateOrderStatus('${id}','Completed')">Mark Complete</button>
+          <button class="btn-gray" onclick="updateOrderStatus('${id}','Pending')">Mark Pending</button>
+          ${currentUser.role== 'ceo' || currentUser.role== 'manager'? `<button class="btn-danger" onclick="deleteOrder('${id}')">Delete</button>` : ''}
+        </div>
+      </div>`;
+    })
+  }
+
+  window.updateOrderStatus = (id, status) => { set(ref(db, 'chriscarwash/requests/' + id + '/status'), status); }
+  window.deleteOrder = (id) => { if(currentUser.role!= 'ceo' && currentUser.role!= 'manager') return alert('No permission'); if(confirm('Delete this order?')) remove(ref(db, 'chriscarwash/requests/' + id)) }
+
+  window.openInvoiceModal = (id) => {
+    currentInvoiceId = id; let o = orders[id];
+    document.getElementById('invCustName').value = o.customerName || '';
+    document.getElementById('invCustPhone').value = o.customerPhone || '';
+    document.getElementById('invCustEmail').value = o.customerEmail || '';
+    document.getElementById('invCustAddress').value = o.customerAddress || '';
+    document.getElementById('invoiceModal').style.display = 'flex';
   }
 
   window.downloadFinalInvoice = () => {
@@ -367,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
     doc.text("Description", 10, y); doc.text("Qty", 120, y); doc.text("Rate", 145, y); doc.text("Amount", 175, y);
     y += 5; doc.line(10, y, 200, y); y += 7; doc.setFont(undefined, 'normal');
     o.items.forEach(i=>{ doc.text(i.name.substring(0,35), 10, y); doc.text(i.qty.toString(), 120, y); doc.text(`R${i.price}`, 145, y); doc.text(`R${i.price*i.qty}`, 175, y); y += 7; });
-    y += 5; doc.line(200, y); y += 7; doc.text("Subtotal:", 145, y); doc.text(`R${subtotal.toFixed(2)}`, 175, y); y += 7;
+    y += 5; doc.line(120, y, 200, y); y += 7; doc.text("Subtotal:", 145, y); doc.text(`R${subtotal.toFixed(2)}`, 175, y); y += 7; // FIXED
     if(addTax){ doc.text("VAT 15%:", 145, y); doc.text(`R${tax.toFixed(2)}`, 175, y); y += 7; }
     doc.setFont(undefined, 'bold'); doc.setFontSize(12); doc.text("TOTAL:", 145, y); doc.text(`R${grandTotal.toFixed(2)}`, 175, y);
     if(isPaid){ doc.setFontSize(30); doc.setTextColor(0, 184, 148); doc.text("PAID", 80, 150, {angle: -30}); doc.setTextColor(0,0,0); }
@@ -464,7 +557,18 @@ document.addEventListener('DOMContentLoaded', () => {
   window.updateStock = (id) => { let add = parseInt(document.getElementById('stock_'+id).value); set(ref(db, 'chriscarwash/categories/' + id + '/stock'), (products[id].stock||0) + add); document.getElementById('stock_'+id).value = 0; }
 
   window.addToCart = (id) => { let p = products[id]; let item = cart.find(x=>x.id==id); if(item){ item.qty++ } else { cart.push({id,name:p.name,price:p.price,qty:1,category:p.category}) } updateCart(); renderProducts(); renderClientProducts(); }
-  window.decreaseQty = (id) => { let item = cart.find(x=>x.id==id); if(item){ item.qty--; if(item.qty <= 0){ cart = cart.filter(x=>x.id!=id); } updateCart(); renderProducts(); renderClientProducts(); }
+  window.decreaseQty = (id) => {
+    let item = cart.find(x=>x.id==id);
+    if(item){
+      item.qty--;
+      if(item.qty <= 0){
+        cart = cart.filter(x=>x.id!=id);
+      }
+    }
+    updateCart();
+    renderProducts();
+    renderClientProducts();
+  } // FIXED
 
   function updateCart(){
     cartBar.style.display = cart.length?'block':'none'; clientCartBar.style.display = cart.length?'block':'none';
