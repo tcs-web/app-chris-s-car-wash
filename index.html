@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let extraImgs = imgs.map((u,i)=>`<img src="${u}" class="${i==0?'active':''}" onclick="switchImage('${id}','${u}',this)" onerror="this.style.display='none'">`).join('');
       let brands = p.desc? p.desc.split(',').map(b=>`<span class="brand-tag">${b}</span>`).join('') : '';
       let cartBtn = p.stock > 0? getCartControls(id) : `<button class="btn-oos" disabled>Unavailable</button>`;
-      clientProductGrid.innerHTML      clientProductGrid.innerHTML += `<div class="card" id="card_${id}"><img id="main_${id}" src="${mainImg}" loading="lazy" onerror="this.onerror=null;this.src='https://i.ibb.co/QjtSn1DR/IMG-20260728-WA0352.jpg'"><div class="card-imgs">${extraImgs}</div><h4>${p.name}</h4>${brands}<div class="price">R${p.price} ${p.oldPrice? `<span class="old-price">R${p.oldPrice}</span>`:''}</div>${cartBtn}</div>`;
+            clientProductGrid.innerHTML += `<div class="card" id="card_${id}"><img id="main_${id}" src="${mainImg}" loading="lazy" onerror="this.onerror=null;this.src='https://i.ibb.co/QjtSn1DR/IMG-20260728-WA0352.jpg'"><div class="card-imgs">${extraImgs}</div><h4>${p.name}</h4>${brands}<div class="price">R${p.price} ${p.oldPrice? `<span class="old-price">R${p.oldPrice}</span>`:''}</div>${cartBtn}</div>`;
     })
   }
 
