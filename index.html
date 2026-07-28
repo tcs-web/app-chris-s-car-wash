@@ -18,9 +18,12 @@ html, body{overflow-x:hidden; width:100%}
 .search-box input{border:none;outline:none;width:100%;background:transparent;color:#000}
 .nav-cats{display:flex;gap:15px;overflow-x:auto;margin-top:10px;padding-bottom:5px;padding-right:15px}
 .nav-cats button{background:rgba(255,255,255,0.2);border:none;color:#fff;padding:6px 12px;border-radius:20px;font-weight:600;cursor:pointer;white-space:nowrap}
+
+/* ENHANCED: Client category buttons now visible - Black on White */
 #clientView.nav-cats button{background:#fff!important;color:#000!important;border:1px solid #ccc!important;opacity:1!important;}
 #clientView.nav-cats button:hover{background:var(--accent)!important;color:#fff!important;}
 #clientView.nav-cats button.active{background:var(--accent)!important;color:#fff!important;border-bottom:2px solid #000!important;font-weight:700!important;}
+
 .container{max-width:100%;margin:0 auto;padding:10px}
 .banner{background:linear-gradient(135deg,#8B0000,#B22222);color:#fff;padding:20px;border-radius:15px;text-align:center;margin:15px 0;font-weight:800;font-size:18px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
@@ -554,7 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.deleteProduct = (id) => { if(currentUser.role!= 'ceo') return alert('CEO only'); if(confirm('Delete this service?')) remove(ref(db, 'chriscarwash/categories/' + id)) }
-  window.updateStock = (id) => { let add = parseInt(document.getElementById('stock_'+id).value); set(ref(db, 'chriscarwash/categories/' + id + '/status'), (products[id].stock||0) + add); document.getElementById('stock_'+id).value = 0; }
+  window.updateStock = (id) => { let add = parseInt(document.getElementById('stock_'+id).value); set(ref(db, 'chriscarwash/categories/' + id + '/stock'), (products[id].stock||0) + add); document.getElementById('stock_'+id).value = 0; } // FIXED
 
   window.addToCart = (id) => { let p = products[id]; let item = cart.find(x=>x.id==id); if(item){ item.qty++ } else { cart.push({id,name:p.name,price:p.price,qty:1,category:p.category}) } updateCart(); renderProducts(); renderClientProducts(); }
   window.decreaseQty = (id) => {
@@ -575,6 +578,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let count = cart.reduce((a,b)=>a+b.qty,0); let total = cart.reduce((a,b)=>a+b.qty*b.price,0);
     if(cartCount) cartCount.innerText = count; if(clientCartCount) clientCartCount.innerText = count;
     if(cartTotal) cartTotal.innerText = total; if(clientCartTotal) clientCartTotal.innerText = total;
+  }
+
+  window.sendQuote = () => {
+    let name = document.getElementById('custName').value;
+    let phone = document.getElementById('custPhone').value;
+    let email = document.getElementById('custEmail').value;
+    if(!name ||!phone) return alert('Please enter Name and Phone');
+    let total = cart.reduce((a,b)=>a+b.qty*b.price,0);
+    let orderId = Date.now().toString();
+    const order = {
+      user: 'Client',
+      customerName: name,
+      customerPhone: phone,
+      customerEmail: email,
+      items: cart,
+      total: total,
+      date: new Date().toISOString(),
+      status: 'Pending'
+    };
+    set(ref(db, 'chriscarwash/requests/' + orderId), order);
+    cart = []; updateCart(); document.getElementById('customerModal').style.display='none';
+    alert('✅ Order sent! We will contact you soon.');
   }
 
   window.openCustomerModal = () => { if(cart.length === 0) return alert('Cart empty'); document.getElementById('customerModal').style.display = 'flex'; }
